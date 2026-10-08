@@ -1,12 +1,18 @@
-use std::fs;
 use std::io::{BufRead, BufReader, Result, Write};
 use std::net::{self, TcpStream};
+use std::sync::LazyLock;
+use std::{env, fs};
 use webserver_rs::ThreadPool;
 
+static PORT: LazyLock<String> = LazyLock::new(|| match env::var("PORT") {
+    Ok(v) => v,
+    Err(_) => String::from("8888"),
+});
+
 fn main() -> Result<()> {
-    let listener = net::TcpListener::bind("127.0.0.1:8888")?;
+    let listener = net::TcpListener::bind(format!("0.0.0.0:{}", *PORT))?;
     let pool = ThreadPool::new(4);
-    println!("Listening on port 8888");
+    println!("Listening on port {}", *PORT);
 
     for stream in listener.incoming() {
         let stream = stream.unwrap();
