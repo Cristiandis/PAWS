@@ -1,25 +1,68 @@
-use std::io::{BufRead, BufReader, Result, Write};
+use anyhow::{Context, Result};
+use serde::Deserialize;
+use std::io::{BufRead, BufReader, Write};
 use std::net::{self, TcpStream};
-use std::sync::LazyLock;
-use std::{env, fs};
+use std::num::NonZeroUsize;
+use std::path::Path;
+use std::{fs, io};
 use webserver_rs::ThreadPool;
 
-static PORT: LazyLock<String> = LazyLock::new(|| match env::var("PORT") {
-    Ok(v) => v,
-    Err(_) => String::from("8888"),
-});
+#[derive(Debug, Deserialize)]
+struct Config {
+    #[serde(default = "default_interface")]
+    interface: String,
+    #[serde(default = "default_port")]
+    port: String,
+}
+
+fn default_interface() -> String {
+    "0.0.0.0".into()
+}
+
+fn default_port() -> String {
+    "8888".into()
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Config {
+            interface: default_interface(),
+            port: default_port(),
+        }
+    }
+}
+
+impl Config {
+    pub fn from_file(path: impl AsRef<Path>) -> Result<Self> {
+        let path = path.as_ref();
+
+        let contents = match fs::read_to_string(path) {
+            Ok(s) => s,
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {
+                eprintln!("WARN: {} not found, using default options", path.display());
+                return Ok(Self::default());
+            }
+            Err(e) => {
+                return Err(e).with_context(|| format!("failed to read {}", path.display()));
+            }
+        };
+
+        toml::from_str(&contents).with_context(|| format!("invalid config in {}", path.display()))
+    }
+}
 
 fn main() -> Result<()> {
-    let listener = net::TcpListener::bind(format!("0.0.0.0:{}", *PORT))?;
-    let pool = ThreadPool::new(4);
-    println!("Listening on port {}", *PORT);
+    let config: Config = Config::from_file("conf.toml")?;
+    let listener = net::TcpListener::bind(format!("{}:{}", config.interface, config.port))?;
+    let pool = ThreadPool::new(NonZeroUsize::new(4).unwrap())?;
+    println!("Listening on: {}:{}", config.interface, config.port);
 
     for stream in listener.incoming() {
         let stream = stream.unwrap();
 
-        pool.execute(|| {
-            handle_connection_stream(stream);
-        });
+        if let Err(e) = pool.execute(|| handle_connection_stream(stream)) {
+            eprintln!("could not schedule job: {e}");
+        }
     }
 
     Ok(())
