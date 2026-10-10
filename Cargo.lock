@@ -456,6 +456,7 @@ dependencies = [
  "eframe",
  "serde",
  "toml",
+ "webserver",
 ]
 
 [[package]]
