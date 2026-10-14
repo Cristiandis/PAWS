@@ -1,4 +1,5 @@
 pub mod config;
+pub mod php;
 pub mod server;
 pub mod thread_pool;
 

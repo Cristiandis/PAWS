@@ -36,6 +36,12 @@ impl App {
     }
 
     fn save(&mut self) {
+        if let Some(value) = &self.config.php_fpm {
+            if value.is_empty() {
+                self.config.php_fpm = None;
+            }
+        }
+
         self.status = match toml::to_string(&self.config) {
             Ok(s) => match fs::write(CONFIG_PATH, s) {
                 Ok(()) => "Salvato".into(),
@@ -58,6 +64,27 @@ impl eframe::App for App {
                 ui.label("Port: ");
                 ui.text_edit_singleline(&mut self.config.port);
             });
+            match &mut self.config.php_fpm {
+                None => {
+                    let mut option = "";
+                    ui.horizontal(|ui| {
+                        ui.label("Php-fpm interface: ");
+                        ui.text_edit_singleline(&mut option);
+                    });
+                    self.config.php_fpm = Some(option.into())
+                }
+                Some(text) => {
+                    ui.horizontal(|ui| {
+                        ui.label("Php-fpm interface: ");
+                        ui.text_edit_singleline(text);
+                    });
+                }
+            }
+            ui.horizontal(|ui| {
+                ui.label("DocumentRoot: ");
+                ui.text_edit_singleline(&mut self.config.document_root);
+            });
+
             if ui.button("Save").clicked() {
                 self.save();
             }

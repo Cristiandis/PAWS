@@ -3,12 +3,16 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::{fs, io};
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Config {
     #[serde(default = "default_interface")]
     pub interface: String,
     #[serde(default = "default_port")]
     pub port: String,
+    #[serde(default)]
+    pub php_fpm: Option<String>,
+    #[serde(default = "default_root")]
+    pub document_root: String,
 }
 
 fn default_interface() -> String {
@@ -19,11 +23,17 @@ fn default_port() -> String {
     "8888".into()
 }
 
+fn default_root() -> String {
+    "htdocs".into()
+}
+
 impl Default for Config {
     fn default() -> Self {
         Config {
             interface: default_interface(),
             port: default_port(),
+            php_fpm: None,
+            document_root: default_root(),
         }
     }
 }
