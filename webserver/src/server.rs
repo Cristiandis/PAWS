@@ -1,7 +1,8 @@
 use crate::{Config, ThreadPool, php};
 use anyhow::{Context, Result, bail};
+use percent_encoding::percent_decode_str;
 use std::fs;
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{BufRead, BufReader, ErrorKind, Read, Write};
 use std::net::{self, SocketAddr, TcpStream};
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
@@ -71,11 +72,17 @@ fn handle_connection_stream(mut stream: TcpStream, config: Arc<Config>, docroot:
     let peer = stream.peer_addr().ok();
 
     let response = match read_request(&stream) {
-        Ok(req) => {
+        Ok(Some(req)) => {
             println!("{} {}", req.method, req.path);
             route(&req, &config, &docroot, peer)
         }
+        Ok(None) => return,
         Err(e) => {
+            if let Some(io) = e.downcast_ref::<std::io::Error>() {
+                if matches!(io.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) {
+                    return;
+                }
+            }
             eprintln!("bad request: {e}");
             status_only("400 Bad Request")
         }
@@ -84,11 +91,13 @@ fn handle_connection_stream(mut stream: TcpStream, config: Arc<Config>, docroot:
     let _ = stream.write_all(&response);
 }
 
-fn read_request(stream: &TcpStream) -> Result<Request> {
+fn read_request(stream: &TcpStream) -> Result<Option<Request>> {
     let mut reader = BufReader::new(stream);
 
     let mut line = String::new();
-    reader.read_line(&mut line)?;
+    if reader.read_line(&mut line)? == 0 {
+        return Ok(None);
+    }
     let mut parts = line.split_whitespace();
     let method = parts.next().context("empty request")?.to_string();
     let target = parts.next().context("request has no target")?;
@@ -119,13 +128,13 @@ fn read_request(stream: &TcpStream) -> Result<Request> {
     let mut body = vec![0u8; len];
     reader.read_exact(&mut body)?;
 
-    Ok(Request {
+    Ok(Some(Request {
         method,
         path,
         query,
         headers,
         body,
-    })
+    }))
 }
 
 fn route(req: &Request, config: &Config, docroot: &Path, peer: Option<SocketAddr>) -> Vec<u8> {
@@ -163,7 +172,8 @@ fn route(req: &Request, config: &Config, docroot: &Path, peer: Option<SocketAddr
 }
 
 fn resolve(docroot: &Path, url_path: &str, php: bool) -> Option<PathBuf> {
-    let mut full = docroot.join(url_path.trim_start_matches('/'));
+    let decoded = percent_decode_str(url_path).decode_utf8().ok()?;
+    let mut full = docroot.join(decoded.trim_start_matches('/'));
     if full.is_dir() {
         let php_index = full.join("index.php");
         full = if php && php_index.exists() {
@@ -257,17 +267,27 @@ fn status_only(status: &str) -> Vec<u8> {
 }
 
 fn content_type(p: &Path) -> &'static str {
-    match p.extension().and_then(|e| e.to_str()) {
+    let ext = p
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase());
+
+    match ext.as_deref() {
         Some("html" | "htm" | "php") => "text/html; charset=utf-8",
-        Some("css") => "text/css",
-        Some("js") => "text/javascript",
+        Some("css") => "text/css; charset=utf-8",
+        Some("js" | "mjs") => "text/javascript; charset=utf-8",
         Some("json") => "application/json",
         Some("txt") => "text/plain; charset=utf-8",
+        Some("pdf") => "application/pdf",
         Some("png") => "image/png",
         Some("jpg" | "jpeg") => "image/jpeg",
         Some("gif") => "image/gif",
+        Some("webp") => "image/webp",
         Some("svg") => "image/svg+xml",
         Some("ico") => "image/x-icon",
+        Some("woff2") => "font/woff2",
+        Some("mp4") => "video/mp4",
+        Some("mp3") => "audio/mpeg",
         _ => "application/octet-stream",
     }
 }
