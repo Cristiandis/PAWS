@@ -48,31 +48,51 @@ pub fn spawn(php: bool, docroot: &Path) -> Result<Option<PhpServer>> {
         let (c, f) = spawn_fpm(&binary, port, docroot)?;
         (c, Some(f))
     };
-    wait_until_listening(&mut child, &addr).with_context(|| {
-        format!("failed to start PHP: {}", binary.display())
-    })?;
+    wait_until_listening(&mut child, &addr)
+        .with_context(|| format!("failed to start PHP: {}", binary.display()))?;
     Ok(Some(PhpServer { addr, child, conf }))
 }
 
 fn find_binary() -> Result<PathBuf> {
-    let mut candidates: Vec<PathBuf> = Vec::new();
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            candidates.push(dir.join("php").join(PHP_FILE));
-            candidates.push(dir.join("php").join(PHP_NAME));
-            candidates.push(dir.join("..").join("Resources").join("php").join(PHP_FILE));
-            candidates.push(dir.join("..").join("Resources").join("php").join(PHP_NAME));
-        }
-    }
-    for c in &candidates {
-        if c.is_file() {
-            return Ok(c.clone());
+    for candidate in candidates() {
+        if candidate.is_file() {
+            return Ok(candidate);
         }
     }
     if let Some(p) = find_in_path(PHP_FILE).or_else(|| find_in_path(PHP_NAME)) {
         return Ok(p);
     }
-    bail!("php = true but no {PHP_NAME} found (checked next to executable, ../Resources/php, PATH)")
+    bail!(
+        "php = true but no {PHP_NAME} found (checked next to executable, ../Resources/php, ../lib/paws/php, APPDIR, PATH)"
+    )
+}
+
+fn search_roots() -> Vec<PathBuf> {
+    let mut roots = Vec::new();
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            roots.push(dir.to_path_buf());
+            if let Some(parent) = dir.parent() {
+                roots.push(parent.to_path_buf());
+                roots.push(parent.join("Resources"));
+                roots.push(parent.join("lib").join("paws"));
+                roots.push(parent.join("lib").join("PAWS"));
+            }
+        }
+    }
+    if let Ok(appdir) = std::env::var("APPDIR") {
+        roots.push(PathBuf::from(appdir).join("usr").join("lib").join("paws"));
+    }
+    roots
+}
+
+fn candidates() -> Vec<PathBuf> {
+    let mut paths = Vec::new();
+    for root in search_roots() {
+        paths.push(root.join(PHP_FILE));
+        paths.push(root.join("php").join(PHP_FILE));
+    }
+    paths
 }
 
 fn find_in_path(name: &str) -> Option<PathBuf> {
@@ -89,7 +109,7 @@ fn find_in_path(name: &str) -> Option<PathBuf> {
 
 #[cfg(not(windows))]
 fn spawn_fpm(binary: &Path, port: u16, docroot: &Path) -> Result<(Child, PathBuf)> {
-    let conf = std::env::temp_dir().join(format!("webserver-php-fpm-{port}.conf"));
+    let conf = std::env::temp_dir().join(format!("paws-php-fpm-{port}.conf"));
     let docroot_s = docroot.display();
     let text = format!(
         "[global]\nerror_log = /dev/stderr\ndaemonize = no\n[www]\nlisten = 127.0.0.1:{port}\npm = dynamic\npm.max_children = 4\npm.start_servers = 2\npm.min_spare_servers = 1\npm.max_spare_servers = 3\ncatch_workers_output = yes\nphp_admin_value[open_basedir] = {docroot_s}:/tmp\n"
@@ -98,7 +118,9 @@ fn spawn_fpm(binary: &Path, port: u16, docroot: &Path) -> Result<(Child, PathBuf
     let mut cmd = Command::new(binary);
     cmd.arg("-F").arg("-y").arg(&conf).arg("-R");
     apply_php_ini(&mut cmd, binary);
-    let child = cmd.spawn().with_context(|| format!("failed to start {}", binary.display()))?;
+    let child = cmd
+        .spawn()
+        .with_context(|| format!("failed to start {}", binary.display()))?;
     Ok((child, conf))
 }
 
@@ -106,8 +128,15 @@ fn spawn_fpm(binary: &Path, port: u16, docroot: &Path) -> Result<(Child, PathBuf
 fn spawn_cgi(binary: &Path, port: u16) -> Result<Child> {
     let mut cmd = Command::new(binary);
     cmd.arg("-b").arg(format!("127.0.0.1:{port}"));
+    if let Some(dir) = binary.parent().map(|p| p.join("ext")) {
+        if dir.is_dir() {
+            cmd.arg("-d")
+                .arg(format!("extension_dir={}", dir.display()));
+        }
+    }
     apply_php_ini(&mut cmd, binary);
-    cmd.spawn().with_context(|| format!("failed to start {}", binary.display()))
+    cmd.spawn()
+        .with_context(|| format!("failed to start {}", binary.display()))
 }
 
 fn apply_php_ini(cmd: &mut Command, binary: &Path) {
@@ -121,7 +150,10 @@ fn apply_php_ini(cmd: &mut Command, binary: &Path) {
 
 fn free_port() -> Result<u16> {
     let listener = TcpListener::bind("127.0.0.1:0").context("failed to bind temp port")?;
-    let port = listener.local_addr().context("failed to get temp port")?.port();
+    let port = listener
+        .local_addr()
+        .context("failed to get temp port")?
+        .port();
     drop(listener);
     Ok(port)
 }
@@ -136,7 +168,10 @@ fn wait_until_listening(child: &mut Child, addr: &str) -> Result<()> {
             bail!("PHP exited during startup ({status})");
         }
         if Instant::now() >= deadline {
-            bail!("PHP did not listen on {addr} within {}s", START_TIMEOUT.as_secs());
+            bail!(
+                "PHP did not listen on {addr} within {}s",
+                START_TIMEOUT.as_secs()
+            );
         }
         std::thread::sleep(Duration::from_millis(50));
     }

@@ -1,0 +1,26 @@
+# Base packaging configuration for PAWS.
+#
+# cargo-packager reads this file automatically, or it can be selected with
+# `-c`. Platform specific settings (formats, resources, signing) live in
+# packaging/packager/<os>.toml and are combined with this file by the release
+# workflow.
+#
+# The GUI is the main application on every platform; the CLI server binary is
+# always shipped alongside it.
+
+name = "paws"
+product-name = "PAWS"
+version = "0.1.0"
+identifier = "dev.paws.app"
+description = "PAWS Answers Web Sessions: a small static file web server with optional PHP support."
+category = "DeveloperTool"
+copyright = "Copyright 2026 Cristiandis"
+license-file = "LICENSE"
+
+out-dir = "dist"
+icons = ["packaging/icons/*"]
+
+binaries = [
+	{ path = "paws", main = false },
+	{ path = "paws-gui", main = true },
+]

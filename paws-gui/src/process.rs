@@ -185,11 +185,11 @@ fn server_binary() -> Result<PathBuf, String> {
     let dir = exe
         .parent()
         .ok_or_else(|| "GUI executable has no parent folder".to_string())?;
-    let path = dir.join(format!("webserver{}", std::env::consts::EXE_SUFFIX));
+    let path = dir.join(format!("paws{}", std::env::consts::EXE_SUFFIX));
     if path.exists() {
         Ok(path)
     } else {
-        Err(format!("webserver not found in {}", dir.display()))
+        Err(format!("paws not found in {}", dir.display()))
     }
 }
 

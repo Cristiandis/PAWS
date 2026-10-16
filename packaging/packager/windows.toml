@@ -1,0 +1,16 @@
+# Windows packaging fragment: combined with Packager.toml by the release
+# workflow. Resources land next to the installed executable, which is where
+# the server looks for php/php-cgi.exe.
+
+formats = ["nsis"]
+binaries-dir = "target/release"
+
+before-packaging-command = "cargo build --release --locked -p paws -p paws-gui"
+
+resources = [
+	{ src = "php-runtime/php", target = "php" },
+	{ src = "licenses", target = "licenses" },
+]
+
+[nsis]
+installer-icon = "packaging/icons/icon.ico"

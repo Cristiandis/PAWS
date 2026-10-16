@@ -1,0 +1,89 @@
+name: php
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PHP_VERSION: "8.4"
+  # Official Windows builds: https://windows.php.net/downloads/releases/releases.json
+  PHP_WINDOWS_ZIP: php-8.4.26-nts-Win32-vs17-x64.zip
+  PHP_WINDOWS_BASE: https://windows.php.net/downloads/releases
+
+jobs:
+  static:
+    name: php-fpm ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            spc: spc-linux-x86_64
+            name: php-linux-x86_64
+          - runner: ubuntu-24.04-arm
+            spc: spc-linux-aarch64
+            name: php-linux-aarch64
+          - runner: macos-latest
+            spc: spc-macos-aarch64
+            name: php-macos-aarch64
+          - runner: macos-26-intel
+            spc: spc-macos-x86_64
+            name: php-macos-x86_64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download spc
+        run: |
+          set -euo pipefail
+          curl -fsSL -o spc "https://dl.static-php.dev/static-php-cli/spc-bin/nightly/${{ matrix.spc }}"
+          chmod +x spc
+
+      - name: Build static PHP
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          ./spc doctor --auto-fix || true
+          ./spc craft --debug
+
+      - name: Collect artifact
+        run: |
+          set -euo pipefail
+          mkdir -p out/licenses
+          install -m 755 buildroot/bin/php-fpm out/php-fpm
+          ./spc dump-license > out/licenses/static-php-cli.txt 2>/dev/null || true
+          curl -fsSL -o out/LICENSE "https://raw.githubusercontent.com/php/php-src/PHP-${{ env.PHP_VERSION }}/LICENSE"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: out
+          if-no-files-found: error
+
+  windows:
+    name: php-cgi windows-x64
+    runs-on: windows-latest
+    steps:
+      - name: Download official PHP for Windows
+        shell: pwsh
+        run: |
+          $url = "${{ env.PHP_WINDOWS_BASE }}/${{ env.PHP_WINDOWS_ZIP }}"
+          Invoke-WebRequest -Uri $url -OutFile php.zip
+          Expand-Archive -Path php.zip -DestinationPath out
+          Remove-Item out/php.exe, out/phpdbg.exe, out/php-win.exe -ErrorAction SilentlyContinue
+
+      - name: Collect artifact
+        shell: pwsh
+        run: |
+          curl.exe -fsSL -o out/LICENSE "https://raw.githubusercontent.com/php/php-src/PHP-${{ env.PHP_VERSION }}/LICENSE"
+          Get-ChildItem out -Filter *.dll | Select-Object -ExpandProperty Name
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: php-windows-x64
+          path: out
+          if-no-files-found: error

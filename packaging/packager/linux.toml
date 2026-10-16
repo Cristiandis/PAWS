@@ -1,0 +1,22 @@
+# Linux packaging fragment: combined with Packager.toml by the release
+# workflow. Ships both the GUI (main, with a desktop entry) and the CLI.
+
+formats = ["deb", "appimage"]
+binaries-dir = "target/release"
+
+before-packaging-command = "cargo build --release --locked -p paws -p paws-gui"
+
+[linux]
+generate-desktop-entry = true
+
+[deb]
+package-name = "paws"
+depends = ["libc6", "libgcc-s1", "libx11-6", "libxkbcommon0", "libwayland-client0"]
+
+[deb.files]
+"php-runtime/php/php-fpm" = "usr/lib/paws/php/php-fpm"
+"php-runtime/php/php.ini" = "usr/lib/paws/php/php.ini"
+
+[appimage.files]
+"php-runtime/php/php-fpm" = "usr/lib/paws/php/php-fpm"
+"php-runtime/php/php.ini" = "usr/lib/paws/php/php.ini"

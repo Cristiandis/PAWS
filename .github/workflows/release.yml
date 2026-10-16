@@ -1,0 +1,257 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # A tag wins; a manual run falls back to the version in Cargo.toml, so a dry
+  # run still produces valid packages on every platform.
+  version:
+    name: resolve version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: resolve
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            version="$(sed -n 's/^version = "\(.*\)"$/\1/p' paws-gui/Cargo.toml | head -n1)"
+          fi
+          if [[ -z "$version" ]]; then
+            echo "could not resolve a version" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  php:
+    uses: ./.github/workflows/php.yml
+
+  linux:
+    name: linux ${{ matrix.arch }}
+    needs: [php, version]
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            arch: x86_64
+            deb_arch: amd64
+            php_artifact: php-linux-x86_64
+          - runner: ubuntu-24.04-arm
+            arch: aarch64
+            deb_arch: aarch64
+            php_artifact: php-linux-aarch64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      # AppImage packaging drives linuxdeploy, which needs FUSE and mksquashfs.
+      - name: Install AppImage tooling
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y squashfs-tools
+          sudo apt-get install -y libfuse2t64 || sudo apt-get install -y libfuse2
+
+      - name: Install cargo-packager
+        run: cargo install cargo-packager --locked
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.php_artifact }}
+          path: php-bin
+
+      - name: Prepare runtime files
+        run: bash packaging/prepare-php-unix.sh php-bin
+
+      - name: Set package version
+        run: |
+          set -euo pipefail
+          sed -i "s/^version = .*/version = \"${{ needs.version.outputs.version }}\"/" Packager.toml
+
+      - name: Package
+        run: |
+          set -euo pipefail
+          cat Packager.toml packaging/packager/linux.toml > Packager.ci.toml
+          cargo packager -c Packager.ci.toml
+
+      - name: Rename artifacts
+        run: |
+          set -euo pipefail
+          version="${{ needs.version.outputs.version }}"
+          mv "dist/paws-gui_${version}_${{ matrix.deb_arch }}.deb" \
+             "dist/PAWS_${version}_${{ matrix.deb_arch }}.deb"
+          mv "dist/paws-gui_${version}_${{ matrix.arch }}.AppImage" \
+             "dist/PAWS_${version}_${{ matrix.arch }}.AppImage"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PAWS-linux-${{ matrix.arch }}
+          path: |
+            dist/*.deb
+            dist/*.AppImage
+          if-no-files-found: error
+
+  macos:
+    name: macos universal
+    needs: [php, version]
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-packager
+        run: cargo install cargo-packager --locked
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: php-macos-aarch64
+          path: php-arm64
+      - uses: actions/download-artifact@v4
+        with:
+          name: php-macos-x86_64
+          path: php-x86_64
+
+      - name: Build universal binaries
+        run: |
+          set -euo pipefail
+          bash packaging/macos/make-lipo.sh
+          lipo -create -output lipo/php-fpm php-arm64/php-fpm php-x86_64/php-fpm
+
+      - name: Prepare runtime files
+        run: bash packaging/prepare-php-unix.sh php-arm64 lipo/php-fpm
+
+      - name: Set package version
+        run: |
+          set -euo pipefail
+          sed -i '' "s/^version = .*/version = \"${{ needs.version.outputs.version }}\"/" Packager.toml
+
+      - name: Package app bundle
+        run: |
+          set -euo pipefail
+          cat Packager.toml packaging/packager/macos.toml > Packager.ci.toml
+          cargo packager -c Packager.ci.toml
+
+      # Plain ad-hoc signature: no Developer ID, no hardened runtime, no
+      # timestamp, no notarization. --deep covers the nested PHP binary.
+      - name: Ad-hoc sign app bundle
+        run: |
+          set -euo pipefail
+          codesign --force --deep --sign - dist/PAWS.app
+          codesign --verify --deep --strict dist/PAWS.app
+
+      - name: Build DMG and zip
+        run: |
+          set -euo pipefail
+          version="${{ needs.version.outputs.version }}"
+          rm -rf dmg-stage
+          mkdir -p dmg-stage
+          cp -R dist/PAWS.app dmg-stage/
+          ln -s /Applications dmg-stage/Applications
+          hdiutil create -volname PAWS -srcfolder dmg-stage -ov -format UDZO \
+            "dist/PAWS_${version}_universal.dmg"
+          ditto -c -k --sequesterRsrc --keepParent dist/PAWS.app \
+            "dist/PAWS_${version}_universal.app.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PAWS-macos-universal
+          path: |
+            dist/*.dmg
+            dist/*.app.zip
+          if-no-files-found: error
+
+  windows:
+    name: windows x64
+    needs: [php, version]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-packager
+        run: cargo install cargo-packager --locked
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: php-windows-x64
+          path: php-bin
+
+      - name: Prepare runtime files
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path php-runtime/php, licenses | Out-Null
+          Copy-Item php-bin/* php-runtime/php -Recurse -Force
+          Remove-Item php-runtime/php/php.exe, php-runtime/php/phpdbg.exe, php-runtime/php/php-win.exe -ErrorAction SilentlyContinue
+          Remove-Item php-runtime/php/php.ini-development, php-runtime/php/php.ini-production -ErrorAction SilentlyContinue
+          Copy-Item php-bin/php.ini-production php-runtime/php/php.ini
+          Get-Content packaging/php.ini, packaging/php-windows.ini | Add-Content php-runtime/php/php.ini
+          Copy-Item LICENSE licenses/PAWS-LICENSE
+          Move-Item php-runtime/php/LICENSE licenses/PHP-LICENSE -ErrorAction SilentlyContinue
+          Get-ChildItem php-runtime/php | Select-Object -ExpandProperty Name
+
+      - name: Set package version
+        shell: pwsh
+        run: |
+          $version = "${{ needs.version.outputs.version }}"
+          (Get-Content Packager.toml) -replace '^version = .*', "version = `"$version`"" |
+            Set-Content Packager.toml
+
+      - name: Package
+        shell: pwsh
+        run: |
+          Get-Content Packager.toml, packaging/packager/windows.toml | Set-Content Packager.ci.toml
+          cargo packager -c Packager.ci.toml
+
+      - name: Rename artifacts
+        shell: pwsh
+        run: |
+          $version = "${{ needs.version.outputs.version }}"
+          Move-Item "dist/paws-gui_${version}_x64-setup.exe" "dist/PAWS_${version}_x64-setup.exe"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PAWS-windows-x64
+          path: dist/*.exe
+          if-no-files-found: error
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [linux, macos, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "${{ github.ref_name }}" \
+            --repo "${{ github.repository }}" \
+            --title "PAWS ${{ github.ref_name }}" \
+            --generate-notes \
+            artifacts/*

@@ -1,3 +1,14 @@
 /target
 /htdocs
 conf.toml
+
+# Packaging outputs and scratch directories
+/dist
+/lipo
+/php-runtime
+/php-bin
+/php-arm64
+/php-x86_64
+/licenses
+/dmg-stage
+/Packager.ci.toml

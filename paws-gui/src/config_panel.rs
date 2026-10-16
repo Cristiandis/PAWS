@@ -1,7 +1,7 @@
 use std::fs;
 
 use eframe::egui;
-use webserver::{CONFIG_PATH, Config};
+use paws::{CONFIG_PATH, Config};
 
 pub struct ConfigPanel {
     config: Config,
@@ -32,7 +32,7 @@ impl ConfigPanel {
 
     pub fn ui(&mut self, ui: &mut egui::Ui) {
         ui.vertical_centered(|ui| {
-            ui.heading("Webserver config");
+            ui.heading("PAWS config");
             ui.horizontal(|ui| {
                 ui.label("Interface: ");
                 ui.text_edit_singleline(&mut self.config.interface);

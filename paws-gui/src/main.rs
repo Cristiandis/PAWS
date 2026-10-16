@@ -96,14 +96,24 @@ fn status_label(status: &Status) -> String {
     }
 }
 
+fn window_icon() -> egui::IconData {
+    eframe::icon_data::from_png_bytes(include_bytes!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../packaging/icons/256x256.png"
+    )))
+    .expect("embedded window icon is a valid PNG")
+}
+
 fn main() -> eframe::Result {
     let native = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([640.0, 480.0]),
+        viewport: egui::ViewportBuilder::default()
+            .with_inner_size([640.0, 480.0])
+            .with_icon(window_icon()),
         ..Default::default()
     };
 
     eframe::run_native(
-        "Webserver GUI",
+        "PAWS",
         native,
         Box::new(|cc| Ok(Box::new(App::new(cc)))),
     )

@@ -2,7 +2,7 @@ use anyhow::Result;
 use std::io::BufRead;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use webserver::{CONFIG_PATH, Config, server};
+use paws::{CONFIG_PATH, Config, server};
 
 fn main() -> Result<()> {
     let config = Config::from_file(CONFIG_PATH)?;

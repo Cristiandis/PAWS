@@ -1,0 +1,23 @@
+# macOS packaging fragment: combined with Packager.toml by the release workflow.
+#
+# Only the .app bundle is produced here. The release workflow then ad-hoc signs
+# the bundle (`codesign --sign -`) and wraps it in a DMG itself, so that the
+# signature is applied with plain ad-hoc parameters: no Apple Developer account
+# is involved and nothing is notarized. Cargo-packager's own signing path always
+# passes `--timestamp` and the hardened runtime, neither of which suits an
+# ad-hoc signature.
+#
+# The workflow places universal (arm64 + x86_64) binaries in lipo/, so nothing
+# is rebuilt per architecture here. Run packaging/macos/make-lipo.sh to prepare
+# the same directory locally.
+
+formats = ["app"]
+binaries-dir = "lipo"
+
+resources = [
+	{ src = "php-runtime/php", target = "php" },
+	{ src = "licenses", target = "licenses" },
+]
+
+[macos]
+minimum-system-version = "11.0"
