@@ -1,13 +1,10 @@
 use std::fs;
 
 use eframe::egui;
-use webserver::Config;
-
-const CONFIG_PATH: &str = "conf.toml";
+use webserver::{CONFIG_PATH, Config};
 
 pub struct ConfigPanel {
     config: Config,
-    php_fpm_text: String,
     status: String,
 }
 
@@ -20,21 +17,11 @@ impl ConfigPanel {
                 format!("WARN: Could not read config file, using defaults: {e}"),
             ),
         };
-        let php_fpm_text = config.php_fpm.clone().unwrap_or_default();
-        Self {
-            config,
-            php_fpm_text,
-            status,
-        }
+        Self { config, status }
     }
 
     fn save(&mut self) {
-        let php_fpm = self.php_fpm_text.trim();
-        self.config.php_fpm = if php_fpm.is_empty() {
-            None
-        } else {
-            Some(php_fpm.to_string())
-        };
+        self.config.php_fpm = self.config.php_fpm.trim().to_string();
 
         self.status = match toml::to_string(&self.config) {
             Ok(s) => match fs::write(CONFIG_PATH, s) {
@@ -58,7 +45,7 @@ impl ConfigPanel {
             });
             ui.horizontal(|ui| {
                 ui.label("Php-fpm interface: ");
-                ui.text_edit_singleline(&mut self.php_fpm_text);
+                ui.text_edit_singleline(&mut self.config.php_fpm);
             });
             ui.horizontal(|ui| {
                 ui.label("DocumentRoot: ");

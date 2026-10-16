@@ -49,9 +49,10 @@ pub fn run(config: &Config, shutdown: &Arc<AtomicBool>) -> Result<()> {
 
     println!("Listening on: {}:{}", config.interface, config.port);
     println!("Document root: {}", docroot.display());
-    match &config.php_fpm {
-        Some(addr) => println!("PHP enabled via php-fpm at {addr}"),
-        None => println!("PHP disabled (php_fpm not set in conf.toml)"),
+    if config.php_fpm.is_empty() {
+        println!("PHP disabled (php_fpm not set in conf.toml)");
+    } else {
+        println!("PHP enabled via php-fpm at {}", config.php_fpm);
     }
 
     let mut wake_addr = listener.local_addr()?;
@@ -185,14 +186,14 @@ fn read_request(stream: &TcpStream) -> Result<Option<Request>> {
 }
 
 fn route(req: &Request, config: &Config, docroot: &Path, peer: Option<SocketAddr>) -> Vec<u8> {
-    let Some(file) = resolve(docroot, &req.path, config.php_fpm.is_some()) else {
+    let Some(file) = resolve(docroot, &req.path, !config.php_fpm.is_empty()) else {
         return status_only("404 Not Found");
     };
 
     let is_php = file.extension().is_some_and(|e| e == "php");
 
-    if is_php && config.php_fpm.is_some() {
-        let addr = config.php_fpm.as_ref().unwrap();
+    if is_php && !config.php_fpm.is_empty() {
+        let addr = &config.php_fpm;
         let params = build_params(req, &file, docroot, config, peer);
         return match php::fastcgi_request(addr, &params, &req.body) {
             Ok(out) => php_response(&out),

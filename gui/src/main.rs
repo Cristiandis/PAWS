@@ -21,16 +21,6 @@ struct App {
     config: ConfigPanel,
 }
 
-impl App {
-    fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        Self {
-            tab: Tab::Server,
-            server: ServerProcess::new(cc.egui_ctx.clone()),
-            config: ConfigPanel::new(),
-        }
-    }
-}
-
 impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         ui.horizontal(|ui| {
@@ -47,6 +37,14 @@ impl eframe::App for App {
 }
 
 impl App {
+    fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        Self {
+            tab: Tab::Server,
+            server: ServerProcess::new(cc.egui_ctx.clone()),
+            config: ConfigPanel::new(),
+        }
+    }
+
     fn server_ui(&mut self, ui: &mut egui::Ui) {
         self.server.poll();
 

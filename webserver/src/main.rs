@@ -2,10 +2,10 @@ use anyhow::Result;
 use std::io::BufRead;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use webserver::{Config, server};
+use webserver::{CONFIG_PATH, Config, server};
 
 fn main() -> Result<()> {
-    let config = Config::from_file("conf.toml")?;
+    let config = Config::from_file(CONFIG_PATH)?;
     let shutdown = Arc::new(AtomicBool::new(false));
     let flag = Arc::clone(&shutdown);
     std::thread::spawn(move || {

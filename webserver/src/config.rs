@@ -3,14 +3,16 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::{fs, io};
 
+pub const CONFIG_PATH: &str = "conf.toml";
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Config {
     #[serde(default = "default_interface")]
     pub interface: String,
     #[serde(default = "default_port")]
     pub port: String,
-    #[serde(default)]
-    pub php_fpm: Option<String>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub php_fpm: String,
     #[serde(default = "default_root")]
     pub document_root: String,
 }
@@ -32,7 +34,7 @@ impl Default for Config {
         Config {
             interface: default_interface(),
             port: default_port(),
-            php_fpm: None,
+            php_fpm: String::new(),
             document_root: default_root(),
         }
     }
