@@ -137,15 +137,14 @@ impl ServerProcess {
                 self.child = None;
             }
             Ok(None) => {
-                if let Some(since) = stopping_since {
-                    if since.elapsed() >= STOP_TIMEOUT {
+                if let Some(since) = stopping_since
+                    && since.elapsed() >= STOP_TIMEOUT {
                         let _ = child.kill();
                         let code = child.wait().map(|s| s.code()).unwrap_or(None);
                         self.push_system("graceful stop timed out: killed".into());
                         self.status = Status::Exited { code };
                         self.child = None;
                     }
-                }
             }
             Err(e) => {
                 self.status = Status::Error(format!("waiting on server failed: {e}"));

@@ -1,28 +1,34 @@
 use std::fs;
 
 use eframe::egui;
-use paws::{CONFIG_PATH, Config};
+use paws::Config;
 
 pub struct ConfigPanel {
     config: Config,
     status: String,
+    config_path: std::path::PathBuf,
 }
 
 impl ConfigPanel {
     pub fn new() -> Self {
-        let (config, status) = match Config::from_file(CONFIG_PATH) {
+        let config_path = Config::config_path();
+        let (config, status) = match Config::from_file(&config_path) {
             Ok(c) => (c, String::new()),
             Err(e) => (
                 Config::default(),
                 format!("WARN: Could not read config file, using defaults: {e}"),
             ),
         };
-        Self { config, status }
+        Self {
+            config,
+            status,
+            config_path,
+        }
     }
 
     fn save(&mut self) {
         self.status = match toml::to_string(&self.config) {
-            Ok(s) => match fs::write(CONFIG_PATH, s) {
+            Ok(s) => match fs::write(&self.config_path, s) {
                 Ok(()) => "Salvato".into(),
                 Err(e) => format!("Error writing to file: {e}"),
             },

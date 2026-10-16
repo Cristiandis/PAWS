@@ -2,10 +2,10 @@ use anyhow::Result;
 use std::io::BufRead;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use paws::{CONFIG_PATH, Config, server};
+use paws::{Config, server};
 
 fn main() -> Result<()> {
-    let config = Config::from_file(CONFIG_PATH)?;
+    let config = Config::load()?;
     let shutdown = Arc::new(AtomicBool::new(false));
     let flag = Arc::clone(&shutdown);
     std::thread::spawn(move || {

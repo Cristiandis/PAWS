@@ -3,8 +3,6 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::{fs, io};
 
-pub const CONFIG_PATH: &str = "conf.toml";
-
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Config {
     #[serde(default = "default_interface")]
@@ -46,6 +44,25 @@ impl Default for Config {
 }
 
 impl Config {
+    pub fn config_path() -> std::path::PathBuf {
+        let mut candidates: Vec<std::path::PathBuf> = Vec::new();
+        if let Some(config_dir) = dirs::config_dir() {
+            candidates.push(config_dir.join("paws").join("conf.toml"));
+        }
+        candidates.push("conf.toml".into());
+        if let Some(existing) = candidates.iter().find(|p| p.exists()) {
+            return existing.clone();
+        }
+        if let Some(config_dir) = dirs::config_dir() {
+            return config_dir.join("paws").join("conf.toml");
+        }
+        "conf.toml".into()
+    }
+
+    pub fn load() -> Result<Self> {
+        Self::from_file(Self::config_path())
+    }
+
     pub fn from_file(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref();
 
