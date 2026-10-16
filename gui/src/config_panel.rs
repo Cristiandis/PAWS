@@ -21,8 +21,6 @@ impl ConfigPanel {
     }
 
     fn save(&mut self) {
-        self.config.php_fpm = self.config.php_fpm.trim().to_string();
-
         self.status = match toml::to_string(&self.config) {
             Ok(s) => match fs::write(CONFIG_PATH, s) {
                 Ok(()) => "Salvato".into(),
@@ -44,13 +42,10 @@ impl ConfigPanel {
                 ui.text_edit_singleline(&mut self.config.port);
             });
             ui.horizontal(|ui| {
-                ui.label("Php-fpm interface: ");
-                ui.text_edit_singleline(&mut self.config.php_fpm);
-            });
-            ui.horizontal(|ui| {
                 ui.label("DocumentRoot: ");
                 ui.text_edit_singleline(&mut self.config.document_root);
             });
+            ui.checkbox(&mut self.config.php, "PHP (bundled php-fpm)");
 
             if ui.button("Save").clicked() {
                 self.save();

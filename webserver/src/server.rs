@@ -45,14 +45,15 @@ pub fn run(config: &Config, shutdown: &Arc<AtomicBool>) -> Result<()> {
             format!("Error: Cannot canonicalize path: {}", config.document_root)
         })?);
     }
+    let php = crate::php_manager::spawn(config.php, &docroot)?;
+    let php_addr = php.as_ref().map(|p| p.addr.clone());
     let config = Arc::new(config.clone());
 
     println!("Listening on: {}:{}", config.interface, config.port);
     println!("Document root: {}", docroot.display());
-    if config.php_fpm.is_empty() {
-        println!("PHP disabled (php_fpm not set in conf.toml)");
-    } else {
-        println!("PHP enabled via php-fpm at {}", config.php_fpm);
+    match php_addr.as_deref() {
+        Some(addr) => println!("PHP enabled via bundled PHP at {addr}"),
+        None => println!("PHP disabled (php = false in conf.toml)"),
     }
 
     let mut wake_addr = listener.local_addr()?;
@@ -95,9 +96,10 @@ pub fn run(config: &Config, shutdown: &Arc<AtomicBool>) -> Result<()> {
 
                 let config = Arc::clone(&config);
                 let docroot = Arc::clone(&docroot);
+                let php_addr = php_addr.clone();
 
                 if let Err(e) =
-                    pool.execute(move || handle_connection_stream(stream, config, docroot))
+                    pool.execute(move || handle_connection_stream(stream, config, docroot, php_addr))
                 {
                     eprintln!("could not schedule job: {e}");
                 }
@@ -115,14 +117,14 @@ pub fn run(config: &Config, shutdown: &Arc<AtomicBool>) -> Result<()> {
     Ok(())
 }
 
-fn handle_connection_stream(mut stream: TcpStream, config: Arc<Config>, docroot: Arc<PathBuf>) {
+fn handle_connection_stream(mut stream: TcpStream, config: Arc<Config>, docroot: Arc<PathBuf>, php_addr: Option<String>) {
     let _ = stream.set_read_timeout(Some(Duration::from_secs(10)));
     let peer = stream.peer_addr().ok();
 
     let response = match read_request(&stream) {
         Ok(Some(req)) => {
             println!("{} {}", req.method, req.path);
-            route(&req, &config, &docroot, peer)
+            route(&req, &config, &docroot, php_addr.as_deref(), peer)
         }
         Ok(None) => return,
         Err(e) => {
@@ -185,15 +187,23 @@ fn read_request(stream: &TcpStream) -> Result<Option<Request>> {
     }))
 }
 
-fn route(req: &Request, config: &Config, docroot: &Path, peer: Option<SocketAddr>) -> Vec<u8> {
-    let Some(file) = resolve(docroot, &req.path, !config.php_fpm.is_empty()) else {
+fn route(
+    req: &Request,
+    config: &Config,
+    docroot: &Path,
+    php_addr: Option<&str>,
+    peer: Option<SocketAddr>,
+) -> Vec<u8> {
+    let Some(file) = resolve(docroot, &req.path, php_addr.is_some()) else {
         return status_only("404 Not Found");
     };
 
     let is_php = file.extension().is_some_and(|e| e == "php");
 
-    if is_php && !config.php_fpm.is_empty() {
-        let addr = &config.php_fpm;
+    if is_php {
+        let Some(addr) = php_addr else {
+            return status_only("404 Not Found");
+        };
         let params = build_params(req, &file, docroot, config, peer);
         return match php::fastcgi_request(addr, &params, &req.body) {
             Ok(out) => php_response(&out),
