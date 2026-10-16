@@ -54,7 +54,7 @@ jobs:
             php_artifact: php-linux-x86_64
           - runner: ubuntu-24.04-arm
             arch: aarch64
-            deb_arch: aarch64
+            deb_arch: arm64
             php_artifact: php-linux-aarch64
     steps:
       - uses: actions/checkout@v4
@@ -94,11 +94,9 @@ jobs:
       - name: Rename artifacts
         run: |
           set -euo pipefail
-          version="${{ needs.version.outputs.version }}"
-          mv "dist/paws-gui_${version}_${{ matrix.deb_arch }}.deb" \
-             "dist/PAWS_${version}_${{ matrix.deb_arch }}.deb"
-          mv "dist/paws-gui_${version}_${{ matrix.arch }}.AppImage" \
-             "dist/PAWS_${version}_${{ matrix.arch }}.AppImage"
+          for f in dist/paws-gui_*.deb dist/paws-gui_*.AppImage; do
+            [ -e "$f" ] && mv "$f" "dist/PAWS_${f#dist/paws-gui_}"
+          done
 
       - uses: actions/upload-artifact@v4
         with:
