@@ -69,8 +69,8 @@ fn find_binary() -> Result<PathBuf> {
 
 fn search_roots() -> Vec<PathBuf> {
     let mut roots = Vec::new();
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(dir) = exe.parent() {
             roots.push(dir.to_path_buf());
             if let Some(parent) = dir.parent() {
                 roots.push(parent.to_path_buf());
@@ -79,7 +79,6 @@ fn search_roots() -> Vec<PathBuf> {
                 roots.push(parent.join("lib").join("PAWS"));
             }
         }
-    }
     if let Ok(appdir) = std::env::var("APPDIR") {
         roots.push(PathBuf::from(appdir).join("usr").join("lib").join("paws"));
     }

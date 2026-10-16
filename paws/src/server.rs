@@ -128,11 +128,10 @@ fn handle_connection_stream(mut stream: TcpStream, config: Arc<Config>, docroot:
         }
         Ok(None) => return,
         Err(e) => {
-            if let Some(io) = e.downcast_ref::<std::io::Error>() {
-                if matches!(io.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) {
+            if let Some(io) = e.downcast_ref::<std::io::Error>()
+                && matches!(io.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) {
                     return;
                 }
-            }
             eprintln!("bad request: {e}");
             status_only("400 Bad Request")
         }
