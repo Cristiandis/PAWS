@@ -47,14 +47,19 @@ impl Config {
     pub fn config_path() -> std::path::PathBuf {
         let mut candidates: Vec<std::path::PathBuf> = Vec::new();
         if let Some(config_dir) = dirs::config_dir() {
-            candidates.push(config_dir.join("paws").join("conf.toml"));
+            let app_dir = config_dir.join("paws");
+            if let Err(_) = std::fs::create_dir_all(&app_dir) {
+            }
+            candidates.push(app_dir.join("conf.toml"));
         }
         candidates.push("conf.toml".into());
         if let Some(existing) = candidates.iter().find(|p| p.exists()) {
             return existing.clone();
         }
         if let Some(config_dir) = dirs::config_dir() {
-            return config_dir.join("paws").join("conf.toml");
+            let app_dir = config_dir.join("paws");
+            let _ = std::fs::create_dir_all(&app_dir);
+            return app_dir.join("conf.toml");
         }
         "conf.toml".into()
     }

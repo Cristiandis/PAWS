@@ -98,8 +98,8 @@ pub fn run(config: &Config, shutdown: &Arc<AtomicBool>) -> Result<()> {
                 let docroot = Arc::clone(&docroot);
                 let php_addr = php_addr.clone();
 
-                if let Err(e) =
-                    pool.execute(move || handle_connection_stream(stream, config, docroot, php_addr))
+                if let Err(e) = pool
+                    .execute(move || handle_connection_stream(stream, config, docroot, php_addr))
                 {
                     eprintln!("could not schedule job: {e}");
                 }
@@ -117,7 +117,12 @@ pub fn run(config: &Config, shutdown: &Arc<AtomicBool>) -> Result<()> {
     Ok(())
 }
 
-fn handle_connection_stream(mut stream: TcpStream, config: Arc<Config>, docroot: Arc<PathBuf>, php_addr: Option<String>) {
+fn handle_connection_stream(
+    mut stream: TcpStream,
+    config: Arc<Config>,
+    docroot: Arc<PathBuf>,
+    php_addr: Option<String>,
+) {
     let _ = stream.set_read_timeout(Some(Duration::from_secs(10)));
     let peer = stream.peer_addr().ok();
 
@@ -129,9 +134,10 @@ fn handle_connection_stream(mut stream: TcpStream, config: Arc<Config>, docroot:
         Ok(None) => return,
         Err(e) => {
             if let Some(io) = e.downcast_ref::<std::io::Error>()
-                && matches!(io.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) {
-                    return;
-                }
+                && matches!(io.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut)
+            {
+                return;
+            }
             eprintln!("bad request: {e}");
             status_only("400 Bad Request")
         }
@@ -200,17 +206,16 @@ fn route(
     let is_php = file.extension().is_some_and(|e| e == "php");
 
     if is_php {
-        let Some(addr) = php_addr else {
-            return status_only("404 Not Found");
-        };
-        let params = build_params(req, &file, docroot, config, peer);
-        return match php::fastcgi_request(addr, &params, &req.body) {
-            Ok(out) => php_response(&out),
-            Err(e) => {
-                eprintln!("php-fpm error: {e}");
-                status_only("502 Bad Gateway")
-            }
-        };
+        if let Some(addr) = php_addr {
+            let params = build_params(req, &file, docroot, config, peer);
+            return match php::fastcgi_request(addr, &params, &req.body) {
+                Ok(out) => php_response(&out),
+                Err(e) => {
+                    eprintln!("php-fpm error: {e}");
+                    status_only("502 Bad Gateway")
+                }
+            };
+        }
     }
 
     match fs::read(&file) {
