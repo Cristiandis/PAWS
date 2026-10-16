@@ -2,3 +2,7 @@
 resolver = "3"
 members = ["paws", "paws-gui"]
 default-members = ["paws"]
+
+[profile.release]
+lto = true
+strip = true
