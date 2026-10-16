@@ -39,12 +39,17 @@ pub fn run(config: &Config, shutdown: &Arc<AtomicBool>) -> Result<()> {
     fs::create_dir_all(&docroot_path)
         .with_context(|| format!("Failed to create directory: {}", docroot_path.display()))?;
 
-    let docroot = Arc::new(docroot_path.canonicalize().with_context(|| {
-        format!(
-            "Error: Cannot canonicalize path: {}",
-            docroot_path.display()
-        )
-    })?);
+    let docroot = Arc::new(
+        docroot_path
+            .canonicalize()
+            .map(simplify_path)
+            .with_context(|| {
+                format!(
+                    "Error: Cannot canonicalize path: {}",
+                    docroot_path.display()
+                )
+            })?,
+    );
     let php = crate::php_manager::spawn(config.php, &docroot)?;
     let php_addr = php.as_ref().map(|p| p.addr.clone());
     let config = Arc::new(config.clone());
@@ -232,6 +237,22 @@ fn route(
         Err(_) => status_only("404 Not Found"),
     }
 }
+#[cfg(windows)]
+fn simplify_path(p: PathBuf) -> PathBuf {
+    let s = p.to_string_lossy();
+    if let Some(rest) = s.strip_prefix(r"\\?\UNC\") {
+        PathBuf::from(format!(r"\\{rest}"))
+    } else if let Some(rest) = s.strip_prefix(r"\\?\") {
+        PathBuf::from(rest)
+    } else {
+        p
+    }
+}
+
+#[cfg(not(windows))]
+fn simplify_path(p: PathBuf) -> PathBuf {
+    p
+}
 
 fn resolve(docroot: &Path, url_path: &str, php: bool) -> Option<PathBuf> {
     let decoded = percent_decode_str(url_path).decode_utf8().ok()?;
@@ -244,7 +265,7 @@ fn resolve(docroot: &Path, url_path: &str, php: bool) -> Option<PathBuf> {
             full.join("index.html")
         };
     }
-    let full = full.canonicalize().ok()?;
+    let full = simplify_path(full.canonicalize().ok()?);
     full.starts_with(docroot).then_some(full)
 }
 
