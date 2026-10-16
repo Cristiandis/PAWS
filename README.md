@@ -22,16 +22,22 @@ to each other.
 
 ## Configuration
 
-`conf.toml` next to the binary (see `paws/src/config.rs` for defaults):
+`conf.toml` next to the binary (see `paws/src/config.rs` for defaults). Every
+field is optional:
 
 ```toml
 interface = "0.0.0.0"
-port = "8888"
-document_root = "htdocs"
+port = "80"
+document_root = "/home/you/Documents/htdocs"
 php = true
 ```
 
-All fields are optional and fall back to the defaults above.
+`interface` defaults to `0.0.0.0`, `port` to `80` and `document_root` to
+`htdocs` inside your Documents folder (`Documents/htdocs` on all three
+platforms). A relative `document_root` resolves against the working directory.
+The folder is created if it does not exist.
+
+Port 80 needs root or `CAP_NET_BIND_SERVICE` on Linux and macOS.
 
 When `php = true`, the server looks for the bundled PHP runtime first, then for
 `php-fpm` (Linux, macOS) or `php-cgi.exe` (Windows) on `PATH`. If it finds

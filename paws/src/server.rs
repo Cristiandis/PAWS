@@ -21,30 +21,30 @@ struct Request {
 }
 
 pub fn run(config: &Config, shutdown: &Arc<AtomicBool>) -> Result<()> {
-    let listener = net::TcpListener::bind(format!("{}:{}", config.interface, config.port))?;
+    let listener = net::TcpListener::bind(format!("{}:{}", config.interface, config.port))
+        .with_context(|| {
+            format!(
+                "failed to bind {}:{}; ports below 1024 need root or CAP_NET_BIND_SERVICE",
+                config.interface, config.port
+            )
+        })?;
     let pool = ThreadPool::new(NonZeroUsize::new(4).unwrap())?;
 
-    let docroot;
-
-    if config.document_root.starts_with("/") {
-        docroot = Arc::new(
-            PathBuf::from(config.document_root.clone())
-                .canonicalize()
-                .context(format!(
-                    "The folder {} does not exist",
-                    config.document_root
-                ))?,
-        );
+    let docroot_path = if Path::new(&config.document_root).is_absolute() {
+        PathBuf::from(&config.document_root)
     } else {
-        let full_path = std::env::current_dir()?.join(&config.document_root);
+        std::env::current_dir()?.join(&config.document_root)
+    };
 
-        fs::create_dir_all(&full_path)
-            .with_context(|| format!("Failed to create directory: {}", config.document_root))?;
+    fs::create_dir_all(&docroot_path)
+        .with_context(|| format!("Failed to create directory: {}", docroot_path.display()))?;
 
-        docroot = Arc::new(full_path.canonicalize().with_context(|| {
-            format!("Error: Cannot canonicalize path: {}", config.document_root)
-        })?);
-    }
+    let docroot = Arc::new(docroot_path.canonicalize().with_context(|| {
+        format!(
+            "Error: Cannot canonicalize path: {}",
+            docroot_path.display()
+        )
+    })?);
     let php = crate::php_manager::spawn(config.php, &docroot)?;
     let php_addr = php.as_ref().map(|p| p.addr.clone());
     let config = Arc::new(config.clone());

@@ -22,11 +22,16 @@ fn default_interface() -> String {
 }
 
 fn default_port() -> String {
-    "8888".into()
+    "80".into()
 }
 
 fn default_root() -> String {
-    "htdocs".into()
+    let documents =
+        dirs::document_dir().or_else(|| dirs::home_dir().map(|home| home.join("Documents")));
+    match documents {
+        Some(dir) => dir.join("htdocs").to_string_lossy().into_owned(),
+        None => "htdocs".into(),
+    }
 }
 
 impl Default for Config {
