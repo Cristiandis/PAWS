@@ -3,10 +3,11 @@ use anyhow::{Context, Result, bail};
 use percent_encoding::percent_decode_str;
 use std::fs;
 use std::io::{BufRead, BufReader, ErrorKind, Read, Write};
-use std::net::{self, SocketAddr, TcpStream};
+use std::net::{self, IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpStream};
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, mpsc};
 use std::time::Duration;
 
 const MAX_BODY: usize = 10 * 1024 * 1024;
@@ -19,7 +20,7 @@ struct Request {
     body: Vec<u8>,
 }
 
-pub fn run(config: &Config) -> Result<()> {
+pub fn run(config: &Config, shutdown: &Arc<AtomicBool>) -> Result<()> {
     let listener = net::TcpListener::bind(format!("{}:{}", config.interface, config.port))?;
     let pool = ThreadPool::new(NonZeroUsize::new(4).unwrap())?;
 
@@ -35,15 +36,14 @@ pub fn run(config: &Config) -> Result<()> {
                 ))?,
         );
     } else {
-        docroot = Arc::new(
-            std::env::current_dir()?
-                .join(config.document_root.clone())
-                .canonicalize()
-                .context(format!(
-                    "The folder {} does not exist",
-                    config.document_root
-                ))?,
-        );
+        let full_path = std::env::current_dir()?.join(&config.document_root);
+
+        fs::create_dir_all(&full_path)
+            .with_context(|| format!("Failed to create directory: {}", config.document_root))?;
+
+        docroot = Arc::new(full_path.canonicalize().with_context(|| {
+            format!("Error: Cannot canonicalize path: {}", config.document_root)
+        })?);
     }
     let config = Arc::new(config.clone());
 
@@ -54,15 +54,62 @@ pub fn run(config: &Config) -> Result<()> {
         None => println!("PHP disabled (php_fpm not set in conf.toml)"),
     }
 
-    for stream in listener.incoming() {
-        let Ok(stream) = stream else { continue };
-        let config = Arc::clone(&config);
-        let docroot = Arc::clone(&docroot);
+    let mut wake_addr = listener.local_addr()?;
+    match wake_addr.ip() {
+        IpAddr::V4(ip) if ip.is_unspecified() => {
+            wake_addr.set_ip(IpAddr::V4(Ipv4Addr::LOCALHOST));
+        }
+        IpAddr::V6(ip) if ip.is_unspecified() => {
+            wake_addr.set_ip(IpAddr::V6(Ipv6Addr::LOCALHOST));
+        }
+        _ => {}
+    }
+    let (done_tx, done_rx) = mpsc::channel::<()>();
+    let waker = {
+        let shutdown = Arc::clone(shutdown);
+        std::thread::spawn(move || {
+            let mut woken = false;
+            loop {
+                match done_rx.recv_timeout(Duration::from_millis(50)) {
+                    Ok(()) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
+                    Err(mpsc::RecvTimeoutError::Timeout) => {}
+                }
+                if !woken && shutdown.load(Ordering::SeqCst) {
+                    woken = TcpStream::connect(wake_addr).is_ok();
+                }
+            }
+        })
+    };
 
-        if let Err(e) = pool.execute(move || handle_connection_stream(stream, config, docroot)) {
-            eprintln!("could not schedule job: {e}");
+    loop {
+        if shutdown.load(Ordering::SeqCst) {
+            break;
+        }
+
+        match listener.accept() {
+            Ok((stream, _)) => {
+                if shutdown.load(Ordering::SeqCst) {
+                    break;
+                }
+
+                let config = Arc::clone(&config);
+                let docroot = Arc::clone(&docroot);
+
+                if let Err(e) =
+                    pool.execute(move || handle_connection_stream(stream, config, docroot))
+                {
+                    eprintln!("could not schedule job: {e}");
+                }
+            }
+            Err(e) if e.kind() == ErrorKind::Interrupted => continue,
+            Err(_) => std::thread::sleep(Duration::from_millis(10)),
         }
     }
+
+    let _ = done_tx.send(());
+    let _ = waker.join();
+
+    println!("Shutting down...");
 
     Ok(())
 }

@@ -1,4 +1,0 @@
-interface = "127.0.0.1"
-port = "8888"
-php_fpm = "127.0.0.1:9000"
-document_root = "htdocs"
