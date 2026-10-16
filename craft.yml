@@ -3,5 +3,3 @@ extensions: "bcmath,ctype,curl,dom,fileinfo,filter,iconv,mbstring,mbregex,opcach
 sapi:
   - cli
   - fpm
-download-options:
-  prefer-pre-built: true
