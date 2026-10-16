@@ -248,8 +248,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          gh release delete "${{ github.ref_name }}" --yes || true
           gh release create "${{ github.ref_name }}" \
             --repo "${{ github.repository }}" \
             --title "PAWS ${{ github.ref_name }}" \
             --generate-notes \
-            artifacts/*
+            artifacts/*.deb \
+            artifacts/*.AppImage \
+            artifacts/*.dmg \
+            artifacts/*.app.zip \
+            artifacts/*.exe
