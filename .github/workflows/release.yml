@@ -69,8 +69,11 @@ jobs:
           sudo apt-get install -y squashfs-tools
           sudo apt-get install -y libfuse2t64 || sudo apt-get install -y libfuse2
 
-      - name: Install cargo-packager
-        run: cargo install cargo-packager --locked
+      - name: Install packaging tools
+        run: |
+          set -euo pipefail
+          cargo install cargo-packager --locked
+          cargo install cargo-generate-rpm --locked
 
       - uses: actions/download-artifact@v4
         with:
@@ -91,12 +94,45 @@ jobs:
           cat Packager.toml packaging/packager/linux.toml > Packager.ci.toml
           cargo packager -c Packager.ci.toml
 
+      - name: Build RPM
+        run: |
+          set -euo pipefail
+          cargo generate-rpm -p paws-gui \
+            --set-metadata "version = \"${{ needs.version.outputs.version }}\"" \
+            --output "dist/PAWS_${{ needs.version.outputs.version }}_${{ matrix.arch }}.rpm"
+
       - name: Rename artifacts
         run: |
           set -euo pipefail
+          version="${{ needs.version.outputs.version }}"
+          arch="${{ matrix.arch }}"
           for f in dist/paws-gui_*.deb dist/paws-gui_*.AppImage; do
             [ -e "$f" ] && mv "$f" "dist/PAWS_${f#dist/paws-gui_}"
           done
+
+          # cargo-packager's Arch output is a payload tarball plus a generic
+          # PKGBUILD generated next to it. Rename both per architecture so they
+          # do not collide when the artifacts are merged, and point the PKGBUILD
+          # at the renamed tarball.
+          if [ -e dist/PKGBUILD ]; then
+            tarball="$(ls dist/paws-gui_*.tar.gz | head -n1)"
+            newtarball="dist/PAWS_${version}_${arch}.pkg.tar.gz"
+            mv "$tarball" "$newtarball"
+            mv dist/PKGBUILD "dist/PAWS_${version}_${arch}.PKGBUILD"
+            sed -i "s|$(basename "$tarball")|$(basename "$newtarball")|" \
+              "dist/PAWS_${version}_${arch}.PKGBUILD"
+
+            # cargo-packager's package() copies "$srcdir"/*, which also copies
+            # the symlink makepkg creates for the local payload tarball.
+            # Appending an override restricts the copy to the payload tree.
+            printf '%s\n' \
+              '' \
+              '# Override package() from cargo-packager: its version copies "$srcdir"/*,' \
+              '# which also copies the symlink makepkg creates for the local payload tarball.' \
+              'package() {' \
+              '    cp -r "${srcdir}"/usr "${pkgdir}"/' \
+              '}' >> "dist/PAWS_${version}_${arch}.PKGBUILD"
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
@@ -104,6 +140,9 @@ jobs:
           path: |
             dist/*.deb
             dist/*.AppImage
+            dist/*.rpm
+            dist/*.pkg.tar.gz
+            dist/*.PKGBUILD
           if-no-files-found: error
 
   macos:
@@ -255,6 +294,9 @@ jobs:
             --generate-notes \
             artifacts/*.deb \
             artifacts/*.AppImage \
+            artifacts/*.rpm \
+            artifacts/*.pkg.tar.gz \
+            artifacts/*.PKGBUILD \
             artifacts/*.dmg \
             artifacts/*.app.zip \
             artifacts/*.exe

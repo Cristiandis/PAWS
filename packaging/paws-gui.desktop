@@ -1,0 +1,8 @@
+[Desktop Entry]
+Categories=Development;
+Comment=PAWS Answers Web Sessions: a small static file web server with optional PHP support.
+Exec=paws-gui
+Icon=paws-gui
+Name=PAWS
+Terminal=false
+Type=Application
