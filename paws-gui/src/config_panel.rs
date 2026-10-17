@@ -4,12 +4,13 @@ use std::path::PathBuf;
 use eframe::egui;
 use paws::Config;
 
-#[derive(Default)]
 enum SaveStatus {
-    #[default]
     None,
     Saved,
-    Error(String),
+    ReadError(String),
+    SerializeError(String),
+    WriteError(String),
+    OpenFolderError(String),
 }
 
 pub struct ConfigPanel {
@@ -22,44 +23,37 @@ pub struct ConfigPanel {
 impl ConfigPanel {
     pub fn new() -> Self {
         let config_path = Config::config_path();
-        let config = match Config::from_file(&config_path) {
-            Ok(c) => c,
-            Err(e) => {
-                let mut panel = Self {
-                    config: Config::default(),
-                    saved_toml: String::new(),
-                    config_path,
-                    status: SaveStatus::Error(format!(
-                        "Could not read config file, using defaults: {e}"
-                    )),
-                };
-                panel.saved_toml = toml::to_string(&panel.config).unwrap_or_default();
-                return panel;
-            }
+        let (config, status) = match Config::from_file(&config_path) {
+            Ok(c) => (c, SaveStatus::None),
+            Err(e) => (Config::default(), SaveStatus::ReadError(format!("{e}"))),
         };
         let saved_toml = toml::to_string(&config).unwrap_or_default();
         Self {
             config,
             saved_toml,
             config_path,
-            status: SaveStatus::None,
+            status,
         }
+    }
+
+    pub fn config(&self) -> &Config {
+        &self.config
     }
 
     fn is_dirty(&self) -> bool {
         toml::to_string(&self.config).unwrap_or_default() != self.saved_toml
     }
 
-    fn validation_error(&self) -> Option<String> {
+    fn validation_error(&self) -> Option<&'static str> {
         match self.config.port.trim().parse::<u16>() {
             Ok(p) if p > 0 => {}
-            _ => return Some("Port must be a number between 1 and 65535".into()),
+            _ => return Some("err-port"),
         }
         if self.config.interface.trim().is_empty() {
-            return Some("Interface must not be empty".into());
+            return Some("err-interface-empty");
         }
         if self.config.document_root.trim().is_empty() {
-            return Some("Document root must not be empty".into());
+            return Some("err-docroot-required");
         }
         None
     }
@@ -68,7 +62,7 @@ impl ConfigPanel {
         let serialized = match toml::to_string(&self.config) {
             Ok(s) => s,
             Err(e) => {
-                self.status = SaveStatus::Error(format!("Error serializing config: {e}"));
+                self.status = SaveStatus::SerializeError(format!("{e}"));
                 return;
             }
         };
@@ -80,7 +74,7 @@ impl ConfigPanel {
                 self.saved_toml = serialized;
                 self.status = SaveStatus::Saved;
             }
-            Err(e) => self.status = SaveStatus::Error(format!("Error writing to file: {e}")),
+            Err(e) => self.status = SaveStatus::WriteError(format!("{e}")),
         }
     }
 
@@ -91,43 +85,39 @@ impl ConfigPanel {
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from("."));
         if let Err(e) = open::that(&dir) {
-            self.status = SaveStatus::Error(format!("Could not open {}: {e}", dir.display()));
+            self.status = SaveStatus::OpenFolderError(format!("{e}"));
         }
-    }
-
-    pub fn config(&self) -> &Config {
-        &self.config
     }
 
     pub fn ui(&mut self, ui: &mut egui::Ui) {
         let error = self.validation_error();
         let dirty = self.is_dirty();
 
-        ui.heading("PAWS config");
+        ui.heading(egui_i18n::tr!("cfg-title"));
         ui.add_space(4.0);
 
-        field(ui, "Interface", |ui| {
+        field(ui, &egui_i18n::tr!("cfg-interface"), |ui| {
             ui.add_sized(
                 [ui.available_width(), 20.0],
                 egui::TextEdit::singleline(&mut self.config.interface),
             );
         });
 
-        field(ui, "Port", |ui| {
+        field(ui, &egui_i18n::tr!("cfg-port"), |ui| {
             ui.add_sized(
                 [ui.available_width(), 20.0],
                 egui::TextEdit::singleline(&mut self.config.port),
             );
         });
 
-        field(ui, "Document root", |ui| {
-            let browse_width = 70.0;
+        field(ui, &egui_i18n::tr!("cfg-docroot"), |ui| {
+            let browse_width = 90.0;
             let field_width = (ui.available_width() - browse_width - 6.0).max(80.0);
             ui.add_sized(
                 [field_width, 20.0],
                 egui::TextEdit::singleline(&mut self.config.document_root),
             );
-            if ui.button("Browse...").clicked() {
+            if ui.button(egui_i18n::tr!("cfg-browse")).clicked() {
                 let start = PathBuf::from(self.config.document_root.trim());
                 let mut dialog = rfd::FileDialog::new();
                 if start.is_dir() {
@@ -140,40 +130,64 @@ impl ConfigPanel {
         });
 
         ui.add_space(4.0);
-        ui.checkbox(&mut self.config.php, "PHP (bundled php-fpm/php-cgi)");
-        ui.small("Restart the server to apply changes.");
+        ui.checkbox(&mut self.config.php, egui_i18n::tr!("cfg-php"));
+        ui.small(egui_i18n::tr!("cfg-restart-hint"));
 
         ui.add_space(8.0);
 
-        if let Some(err) = &error {
-            ui.colored_label(egui::Color32::LIGHT_RED, err);
+        if let Some(key) = error {
+            ui.colored_label(egui::Color32::LIGHT_RED, egui_i18n::tr!(key));
         }
 
         ui.horizontal(|ui| {
             if ui
-                .add_enabled(dirty && error.is_none(), egui::Button::new("Save"))
+                .add_enabled(
+                    dirty && error.is_none(),
+                    egui::Button::new(egui_i18n::tr!("cfg-save")),
+                )
                 .clicked()
             {
                 self.save();
             }
             if dirty {
-                ui.label(egui::RichText::new("unsaved changes").italics());
+                ui.label(egui::RichText::new(egui_i18n::tr!("cfg-unsaved")).italics());
             }
         });
 
         match &self.status {
             SaveStatus::None => {}
             SaveStatus::Saved => {
-                ui.colored_label(egui::Color32::LIGHT_GREEN, "Saved");
+                ui.colored_label(egui::Color32::LIGHT_GREEN, egui_i18n::tr!("cfg-saved"));
             }
-            SaveStatus::Error(e) => {
-                ui.colored_label(egui::Color32::LIGHT_RED, e);
+            SaveStatus::ReadError(e) => {
+                ui.colored_label(
+                    egui::Color32::LIGHT_RED,
+                    egui_i18n::tr!("err-read-config", { error: e }),
+                );
+            }
+            SaveStatus::SerializeError(e) => {
+                ui.colored_label(
+                    egui::Color32::LIGHT_RED,
+                    egui_i18n::tr!("err-serialize", { error: e }),
+                );
+            }
+            SaveStatus::WriteError(e) => {
+                ui.colored_label(
+                    egui::Color32::LIGHT_RED,
+                    egui_i18n::tr!("err-write-file", { error: e }),
+                );
+            }
+            SaveStatus::OpenFolderError(e) => {
+                ui.colored_label(
+                    egui::Color32::LIGHT_RED,
+                    egui_i18n::tr!("err-open-config-folder", { error: e }),
+                );
             }
         }
 
         ui.separator();
         ui.horizontal(|ui| {
-            ui.label("Config file:");
+            ui.label(egui_i18n::tr!("cfg-file-label"));
             ui.add(
                 egui::Label::new(
                     egui::RichText::new(self.config_path.display().to_string()).monospace(),
@@ -181,7 +195,7 @@ impl ConfigPanel {
                 .truncate(),
             )
             .on_hover_text(self.config_path.display().to_string());
-            if ui.button("Open folder").clicked() {
+            if ui.button(egui_i18n::tr!("cfg-open-folder")).clicked() {
                 self.open_config_folder();
             }
         });

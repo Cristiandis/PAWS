@@ -9,6 +9,10 @@ mod process;
 use config_panel::ConfigPanel;
 use process::{ServerProcess, Status};
 
+const LANGUAGES: [(&str, &str); 2] = [("en-US", "English"), ("it-IT", "Italiano")];
+const DEFAULT_LANG: &str = "en-US";
+const LANG_STORAGE_KEY: &str = "paws-gui-language";
+
 #[derive(PartialEq, Eq, Clone, Copy)]
 enum Tab {
     Server,
@@ -20,13 +24,34 @@ struct App {
     server: ServerProcess,
     config: ConfigPanel,
     autoscroll: bool,
+    lang: &'static str,
 }
 
 impl eframe::App for App {
+    fn save(&mut self, storage: &mut dyn eframe::Storage) {
+        eframe::set_value(storage, LANG_STORAGE_KEY, &self.lang.to_string());
+    }
+
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         ui.horizontal(|ui| {
-            ui.selectable_value(&mut self.tab, Tab::Server, "Server");
-            ui.selectable_value(&mut self.tab, Tab::Config, "Config");
+            ui.selectable_value(&mut self.tab, Tab::Server, egui_i18n::tr!("tab-server"));
+            ui.selectable_value(&mut self.tab, Tab::Config, egui_i18n::tr!("tab-config"));
+
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let mut selected = self.lang;
+                egui::ComboBox::from_id_salt("language")
+                    .selected_text(language_name(selected))
+                    .show_ui(ui, |ui| {
+                        for (code, name) in LANGUAGES {
+                            ui.selectable_value(&mut selected, code, name);
+                        }
+                    });
+                if selected != self.lang {
+                    self.lang = selected;
+                    egui_i18n::set_language(selected);
+                }
+                ui.label(egui_i18n::tr!("cfg-lang"));
+            });
         });
         ui.separator();
 
@@ -39,11 +64,19 @@ impl eframe::App for App {
 
 impl App {
     fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        let lang = cc
+            .storage
+            .and_then(|storage| eframe::get_value::<String>(storage, LANG_STORAGE_KEY))
+            .and_then(|code| LANGUAGES.iter().find(|(c, _)| *c == code).map(|(c, _)| *c))
+            .unwrap_or_else(current_language);
+        egui_i18n::set_language(lang);
+
         Self {
             tab: Tab::Server,
             server: ServerProcess::new(cc.egui_ctx.clone()),
             config: ConfigPanel::new(),
             autoscroll: true,
+            lang,
         }
     }
 
@@ -54,15 +87,15 @@ impl App {
             let stopping = matches!(self.server.status, Status::Stopping { .. });
             if self.server.is_running() {
                 if ui
-                    .add_enabled(!stopping, egui::Button::new("Stop"))
+                    .add_enabled(!stopping, egui::Button::new(egui_i18n::tr!("btn-stop")))
                     .clicked()
                 {
                     self.server.request_stop();
                 }
-                if ui.button("Restart").clicked() {
+                if ui.button(egui_i18n::tr!("btn-restart")).clicked() {
                     self.server.request_restart();
                 }
-            } else if ui.button("Start").clicked() {
+            } else if ui.button(egui_i18n::tr!("btn-start")).clicked() {
                 self.server.start();
             }
 
@@ -73,26 +106,35 @@ impl App {
         ui.add_space(2.0);
 
         ui.horizontal(|ui| {
-            if ui.button("Open in browser").clicked() {
+            if ui.button(egui_i18n::tr!("btn-open-browser")).clicked() {
                 let url = self.server_url();
                 if let Err(e) = open::that(&url) {
-                    self.server.note(format!("could not open {url}: {e}"));
+                    self.server.note(egui_i18n::tr!("err-could-not-open", {
+                        path: &url,
+                        error: &e.to_string()
+                    }));
                 }
             }
-            if ui.button("Open document root").clicked() {
+            if ui.button(egui_i18n::tr!("btn-open-docroot")).clicked() {
                 let root = self.config.config().document_root.trim().to_string();
                 if root.is_empty() {
-                    self.server.note("document root is empty".into());
+                    self.server.note(egui_i18n::tr!("err-docroot-empty"));
                 } else if let Err(e) = std::fs::create_dir_all(&root) {
-                    self.server.note(format!("could not create {root}: {e}"));
+                    self.server.note(egui_i18n::tr!("err-could-not-create", {
+                        path: &root,
+                        error: &e.to_string()
+                    }));
                 } else if let Err(e) = open::that(&root) {
-                    self.server.note(format!("could not open {root}: {e}"));
+                    self.server.note(egui_i18n::tr!("err-could-not-open", {
+                        path: &root,
+                        error: &e.to_string()
+                    }));
                 }
             }
-            if ui.button("Clear logs").clicked() {
+            if ui.button(egui_i18n::tr!("btn-clear-logs")).clicked() {
                 self.server.logs.clear();
             }
-            if ui.button("Copy logs").clicked() {
+            if ui.button(egui_i18n::tr!("btn-copy-logs")).clicked() {
                 let text = self
                     .server
                     .logs
@@ -102,7 +144,7 @@ impl App {
                     .join("\n");
                 ui.ctx().copy_text(text);
             }
-            ui.checkbox(&mut self.autoscroll, "Autoscroll");
+            ui.checkbox(&mut self.autoscroll, egui_i18n::tr!("chk-autoscroll"));
         });
 
         ui.separator();
@@ -142,7 +184,7 @@ impl App {
         };
         let interface = config.interface.trim();
         let host = if interface.is_empty() || interface == "0.0.0.0" || interface == "::" {
-            "localhost"
+            "127.0.0.1"
         } else {
             interface
         };
@@ -150,20 +192,70 @@ impl App {
     }
 }
 
+fn language_name(code: &str) -> &'static str {
+    LANGUAGES
+        .iter()
+        .find(|(c, _)| *c == code)
+        .map(|(_, name)| *name)
+        .unwrap_or(DEFAULT_LANG)
+}
+
+fn current_language() -> &'static str {
+    let current = egui_i18n::get_language();
+    LANGUAGES
+        .iter()
+        .find(|(c, _)| *c == current)
+        .map(|(c, _)| *c)
+        .unwrap_or(DEFAULT_LANG)
+}
+
+fn init_i18n() {
+    egui_i18n::load_translations_from_text("en-US", include_str!("../i18n/en-US.egl"))
+        .expect("en-US translations are valid");
+    egui_i18n::load_translations_from_text("it-IT", include_str!("../i18n/it-IT.egl"))
+        .expect("it-IT translations are valid");
+    egui_i18n::set_fallback("en-US");
+    egui_i18n::set_language(&detect_language());
+}
+
+fn detect_language() -> String {
+    for var in ["LC_ALL", "LC_MESSAGES", "LANG"] {
+        if let Ok(value) = std::env::var(var) {
+            let value = value.to_ascii_lowercase();
+            if value.starts_with("it") {
+                return "it-IT".into();
+            }
+            if value.starts_with("en") {
+                return "en-US".into();
+            }
+        }
+    }
+    DEFAULT_LANG.into()
+}
+
 fn status_indicator(ui: &mut egui::Ui, status: &Status) {
     let (color, label) = match status {
-        Status::Stopped => (egui::Color32::GRAY, "Stopped".to_string()),
+        Status::Stopped => (egui::Color32::GRAY, egui_i18n::tr!("status-stopped")),
         Status::Running { pid } => (
             egui::Color32::from_rgb(0x4c, 0xaf, 0x50),
-            format!("Running (pid {pid})"),
+            egui_i18n::tr!("status-running", { pid: pid }),
         ),
-        Status::Stopping { .. } => (egui::Color32::YELLOW, "Stopping...".to_string()),
-        Status::Exited { code: Some(0) } => (egui::Color32::GRAY, "Stopped (exit 0)".to_string()),
-        Status::Exited { code: Some(c) } => {
-            (egui::Color32::LIGHT_RED, format!("Exited (code {c})"))
+        Status::Stopping { .. } => (egui::Color32::YELLOW, egui_i18n::tr!("status-stopping")),
+        Status::Exited { code: Some(0) } => {
+            (egui::Color32::GRAY, egui_i18n::tr!("status-exited-ok"))
         }
-        Status::Exited { code: None } => (egui::Color32::LIGHT_RED, "Exited (killed)".to_string()),
-        Status::Error(e) => (egui::Color32::LIGHT_RED, format!("Error: {e}")),
+        Status::Exited { code: Some(c) } => (
+            egui::Color32::LIGHT_RED,
+            egui_i18n::tr!("status-exited-code", { code: c }),
+        ),
+        Status::Exited { code: None } => (
+            egui::Color32::LIGHT_RED,
+            egui_i18n::tr!("status-exited-killed"),
+        ),
+        Status::Error(e) => (
+            egui::Color32::LIGHT_RED,
+            egui_i18n::tr!("status-error", { error: e }),
+        ),
     };
     ui.colored_label(color, "\u{25cf}");
     ui.label(label);
@@ -178,6 +270,8 @@ fn window_icon() -> egui::IconData {
 }
 
 fn main() -> eframe::Result {
+    init_i18n();
+
     let native = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([820.0, 620.0])

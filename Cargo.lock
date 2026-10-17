@@ -755,6 +755,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "egui-i18n"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b4b7cc9324798efd4ff992f7d4a1ef92589529a4ead5b2e659b9bff86476e2cc"
+dependencies = [
+ "log",
+ "once_cell",
+]
+
+[[package]]
 name = "egui-wgpu"
 version = "0.36.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2235,6 +2245,7 @@ name = "paws-gui"
 version = "1.1.2"
 dependencies = [
  "eframe",
+ "egui-i18n",
  "open",
  "paws",
  "rfd",

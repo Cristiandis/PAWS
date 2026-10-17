@@ -1,0 +1,61 @@
+# Stringhe italiane per la GUI di PAWS.
+
+tab-server = Server
+tab-config = Configurazione
+
+btn-start = Avvia
+btn-stop = Arresta
+btn-restart = Riavvia
+btn-open-browser = Apri nel browser
+btn-open-docroot = Apri cartella radice
+btn-clear-logs = Cancella log
+btn-copy-logs = Copia log
+chk-autoscroll = Scorrimento automatico
+
+status-stopped = Arrestato
+status-running = In esecuzione (pid {pid})
+status-stopping = Arresto...
+status-exited-ok = Arrestato (uscita 0)
+status-exited-code = Terminato (codice {code})
+status-exited-killed = Terminato forzatamente
+status-error = Errore: {error}
+
+log-started = avviato {path}
+log-server-exited = server terminato ({code})
+log-restarting = riavvio...
+log-stop-timeout = arresto non completato in tempo: terminato
+log-stop-timeout-restart = arresto non completato in tempo: terminato, riavvio...
+code-ok = ok
+code-error = errore
+code-killed = terminato
+
+err-start-failed = avvio non riuscito {path}: {error}
+err-wait-failed = attesa del server non riuscita: {error}
+err-locate-gui = impossibile individuare l'eseguibile della GUI: {error}
+err-no-parent = l'eseguibile della GUI non ha una cartella padre
+err-paws-not-found = paws non trovato in {dir}
+err-docroot-empty = la cartella radice è vuota
+err-could-not-create = impossibile creare {path}: {error}
+err-could-not-open = impossibile aprire {path}: {error}
+
+cfg-title = Configurazione PAWS
+cfg-interface = Interfaccia
+cfg-port = Porta
+cfg-docroot = Cartella radice
+cfg-browse = Sfoglia...
+cfg-php = PHP (php-fpm/php-cgi incluso)
+cfg-restart-hint = Riavvia il server per applicare le modifiche.
+cfg-save = Salva
+cfg-unsaved = modifiche non salvate
+cfg-saved = Salvato
+cfg-file-label = File di configurazione:
+cfg-open-folder = Apri cartella
+cfg-lang = Lingua
+
+err-port = La porta deve essere un numero tra 1 e 65535
+err-interface-empty = L'interfaccia non può essere vuota
+err-docroot-required = La cartella radice non può essere vuota
+err-read-config = Impossibile leggere il file di configurazione, uso i valori predefiniti: {error}
+err-serialize = Errore durante la serializzazione della configurazione: {error}
+err-write-file = Errore durante la scrittura del file: {error}
+err-open-config-folder = Impossibile aprire la cartella di configurazione: {error}

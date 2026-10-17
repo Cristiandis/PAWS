@@ -17,4 +17,5 @@ eframe = { version = "0.36.2", default-features = false, features = [
 paws = { path = "../paws" }
 rfd = "0.15"
 open = "5"
+egui-i18n = "0.2"
 toml = "1.1.8"

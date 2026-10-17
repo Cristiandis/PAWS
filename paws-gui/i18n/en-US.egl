@@ -1,0 +1,61 @@
+# English (source) strings for the PAWS GUI.
+
+tab-server = Server
+tab-config = Config
+
+btn-start = Start
+btn-stop = Stop
+btn-restart = Restart
+btn-open-browser = Open in browser
+btn-open-docroot = Open document root
+btn-clear-logs = Clear logs
+btn-copy-logs = Copy logs
+chk-autoscroll = Autoscroll
+
+status-stopped = Stopped
+status-running = Running (pid {pid})
+status-stopping = Stopping...
+status-exited-ok = Stopped (exit 0)
+status-exited-code = Exited (code {code})
+status-exited-killed = Exited (killed)
+status-error = Error: {error}
+
+log-started = started {path}
+log-server-exited = server exited ({code})
+log-restarting = restarting...
+log-stop-timeout = graceful stop timed out: killed
+log-stop-timeout-restart = graceful stop timed out: killed, restarting...
+code-ok = ok
+code-error = error
+code-killed = killed
+
+err-start-failed = failed to start {path}: {error}
+err-wait-failed = waiting on server failed: {error}
+err-locate-gui = cannot locate GUI executable: {error}
+err-no-parent = GUI executable has no parent folder
+err-paws-not-found = paws not found in {dir}
+err-docroot-empty = document root is empty
+err-could-not-create = could not create {path}: {error}
+err-could-not-open = could not open {path}: {error}
+
+cfg-title = PAWS config
+cfg-interface = Interface
+cfg-port = Port
+cfg-docroot = Document root
+cfg-browse = Browse...
+cfg-php = PHP (bundled php-fpm/php-cgi)
+cfg-restart-hint = Restart the server to apply changes.
+cfg-save = Save
+cfg-unsaved = unsaved changes
+cfg-saved = Saved
+cfg-file-label = Config file:
+cfg-open-folder = Open folder
+cfg-lang = Language
+
+err-port = Port must be a number between 1 and 65535
+err-interface-empty = Interface must not be empty
+err-docroot-required = Document root must not be empty
+err-read-config = Could not read config file, using defaults: {error}
+err-serialize = Error serializing config: {error}
+err-write-file = Error writing to file: {error}
+err-open-config-folder = Could not open config folder: {error}

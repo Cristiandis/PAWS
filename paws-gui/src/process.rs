@@ -90,10 +90,14 @@ impl ServerProcess {
                 let pid = child.id();
                 self.child = Some(child);
                 self.status = Status::Running { pid };
-                self.push_system(format!("started {}", path.display()));
+                let display = path.display().to_string();
+                self.push_system(egui_i18n::tr!("log-started", { path: &display }));
             }
             Err(e) => {
-                self.status = Status::Error(format!("failed to start {}: {e}", path.display()));
+                let display = path.display().to_string();
+                self.status = Status::Error(
+                    egui_i18n::tr!("err-start-failed", { path: &display, error: &e }),
+                );
             }
         }
     }
@@ -115,6 +119,8 @@ impl ServerProcess {
         };
     }
 
+    /// Stop the server if it is running, then start it again once it exits. If
+    /// it is not running, start it immediately.
     pub fn request_restart(&mut self) {
         if self.is_running() {
             self.restart_pending = true;
@@ -156,12 +162,13 @@ impl ServerProcess {
                 self.child = None;
                 if self.restart_pending {
                     self.restart_pending = false;
-                    self.push_system("restarting...".into());
+                    self.push_system(egui_i18n::tr!("log-restarting"));
                     self.status = Status::Stopped;
                     self.start();
                 } else {
-                    self.push_system(format!("server exited ({})", code_str(code)));
-                    self.status = Status::Exited { code };
+                    let code = code_str(code);
+                    self.push_system(egui_i18n::tr!("log-server-exited", { code: &code }));
+                    self.status = Status::Exited { code: exit.code() };
                 }
             }
             Ok(None) => {
@@ -173,17 +180,18 @@ impl ServerProcess {
                     self.child = None;
                     if self.restart_pending {
                         self.restart_pending = false;
-                        self.push_system("graceful stop timed out: killed, restarting...".into());
+                        self.push_system(egui_i18n::tr!("log-stop-timeout-restart"));
                         self.status = Status::Stopped;
                         self.start();
                     } else {
-                        self.push_system("graceful stop timed out: killed".into());
+                        self.push_system(egui_i18n::tr!("log-stop-timeout"));
                         self.status = Status::Exited { code };
                     }
                 }
             }
             Err(e) => {
-                self.status = Status::Error(format!("waiting on server failed: {e}"));
+                self.status =
+                    Status::Error(egui_i18n::tr!("err-wait-failed", { error: &e.to_string() }));
                 self.child = None;
             }
         }
@@ -220,15 +228,20 @@ impl Drop for ServerProcess {
 }
 
 fn server_binary() -> Result<PathBuf, String> {
-    let exe = std::env::current_exe().map_err(|e| format!("cannot locate GUI executable: {e}"))?;
+    let exe = std::env::current_exe().map_err(|e| {
+        egui_i18n::tr!("err-locate-gui", {
+            error: &e.to_string()
+        })
+    })?;
     let dir = exe
         .parent()
-        .ok_or_else(|| "GUI executable has no parent folder".to_string())?;
+        .ok_or_else(|| egui_i18n::tr!("err-no-parent"))?;
     let path = dir.join(format!("paws{}", std::env::consts::EXE_SUFFIX));
     if path.exists() {
         Ok(path)
     } else {
-        Err(format!("paws not found in {}", dir.display()))
+        let display = dir.display().to_string();
+        Err(egui_i18n::tr!("err-paws-not-found", { dir: &display }))
     }
 }
 
@@ -259,10 +272,10 @@ where
     });
 }
 
-fn code_str(code: Option<i32>) -> &'static str {
+fn code_str(code: Option<i32>) -> String {
     match code {
-        Some(0) => "ok",
-        Some(_) => "error",
-        None => "killed",
+        Some(0) => egui_i18n::tr!("code-ok"),
+        Some(_) => egui_i18n::tr!("code-error"),
+        None => egui_i18n::tr!("code-killed"),
     }
 }
