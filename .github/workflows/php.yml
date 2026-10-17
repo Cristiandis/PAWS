@@ -3,6 +3,11 @@ name: php
 on:
   workflow_call:
   workflow_dispatch:
+  push:
+    branches: [master]
+    paths: [craft.yml, .github/workflows/php.yml]
+  schedule:
+    - cron: "0 3 1 * *"
 
 permissions:
   contents: read
@@ -36,13 +41,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Cache key
+        id: month
+        run: echo "month=$(date -u +%Y-%m)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore static PHP
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: out
+          key: php-fpm-${{ matrix.name }}-${{ hashFiles('craft.yml') }}-${{ steps.month.outputs.month }}
+
       - name: Download spc
+        if: steps.cache.outputs.cache-hit != 'true'
         run: |
           set -euo pipefail
           curl -fsSL -o spc "https://dl.static-php.dev/static-php-cli/spc-bin/nightly/${{ matrix.spc }}"
           chmod +x spc
 
       - name: Build static PHP
+        if: steps.cache.outputs.cache-hit != 'true'
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
@@ -51,6 +69,7 @@ jobs:
           ./spc craft --debug
 
       - name: Collect artifact
+        if: steps.cache.outputs.cache-hit != 'true'
         run: |
           set -euo pipefail
           mkdir -p out/licenses

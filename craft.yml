@@ -1,5 +1,4 @@
 php-version: 8.4
 extensions: "bcmath,ctype,curl,dom,fileinfo,filter,iconv,mbstring,mbregex,opcache,openssl,pdo,pdo_sqlite,phar,posix,readline,session,simplexml,sockets,sqlite3,tokenizer,xml,xmlreader,xmlwriter,xsl,zip,zlib"
 sapi:
-  - cli
   - fpm
