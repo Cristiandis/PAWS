@@ -31,6 +31,7 @@ pub struct ServerProcess {
     tx: Sender<LogLine>,
     rx: Receiver<LogLine>,
     ctx: egui::Context,
+    restart_pending: bool,
     pub status: Status,
     pub logs: Vec<LogLine>,
 }
@@ -44,6 +45,7 @@ impl ServerProcess {
             tx,
             rx,
             ctx,
+            restart_pending: false,
             status: Status::Stopped,
             logs: Vec::new(),
         }
@@ -101,6 +103,8 @@ impl ServerProcess {
             return;
         }
 
+        self.restart_pending = false;
+
         if let Some(mut stdin) = self.stdin.take() {
             let _ = stdin.write_all(b"quit\n");
             let _ = stdin.flush();
@@ -109,6 +113,23 @@ impl ServerProcess {
         self.status = Status::Stopping {
             since: Instant::now(),
         };
+    }
+
+    pub fn request_restart(&mut self) {
+        if self.is_running() {
+            self.restart_pending = true;
+            if matches!(self.status, Status::Running { .. }) {
+                if let Some(mut stdin) = self.stdin.take() {
+                    let _ = stdin.write_all(b"quit\n");
+                    let _ = stdin.flush();
+                }
+                self.status = Status::Stopping {
+                    since: Instant::now(),
+                };
+            }
+        } else {
+            self.start();
+        }
     }
 
     pub fn poll(&mut self) {
@@ -132,19 +153,34 @@ impl ServerProcess {
         match child.try_wait() {
             Ok(Some(exit)) => {
                 let code = exit.code();
-                self.push_system(format!("server exited ({})", code_str(code)));
-                self.status = Status::Exited { code };
                 self.child = None;
+                if self.restart_pending {
+                    self.restart_pending = false;
+                    self.push_system("restarting...".into());
+                    self.status = Status::Stopped;
+                    self.start();
+                } else {
+                    self.push_system(format!("server exited ({})", code_str(code)));
+                    self.status = Status::Exited { code };
+                }
             }
             Ok(None) => {
                 if let Some(since) = stopping_since
-                    && since.elapsed() >= STOP_TIMEOUT {
-                        let _ = child.kill();
-                        let code = child.wait().map(|s| s.code()).unwrap_or(None);
+                    && since.elapsed() >= STOP_TIMEOUT
+                {
+                    let _ = child.kill();
+                    let code = child.wait().map(|s| s.code()).unwrap_or(None);
+                    self.child = None;
+                    if self.restart_pending {
+                        self.restart_pending = false;
+                        self.push_system("graceful stop timed out: killed, restarting...".into());
+                        self.status = Status::Stopped;
+                        self.start();
+                    } else {
                         self.push_system("graceful stop timed out: killed".into());
                         self.status = Status::Exited { code };
-                        self.child = None;
                     }
+                }
             }
             Err(e) => {
                 self.status = Status::Error(format!("waiting on server failed: {e}"));
@@ -158,6 +194,10 @@ impl ServerProcess {
             stderr: false,
             text,
         });
+    }
+
+    pub fn note(&mut self, text: String) {
+        self.push_system(text);
     }
 }
 
