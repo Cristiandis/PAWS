@@ -52,7 +52,7 @@ impl Config {
         let mut candidates: Vec<std::path::PathBuf> = Vec::new();
         if let Some(config_dir) = dirs::config_dir() {
             let app_dir = config_dir.join("paws");
-            if let Err(_) = std::fs::create_dir_all(&app_dir) {}
+            let _ = std::fs::create_dir_all(&app_dir);
             candidates.push(app_dir.join("conf.toml"));
         }
         candidates.push("conf.toml".into());

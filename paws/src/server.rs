@@ -210,17 +210,15 @@ fn route(
 
     let is_php = file.extension().is_some_and(|e| e == "php");
 
-    if is_php {
-        if let Some(addr) = php_addr {
-            let params = build_params(req, &file, docroot, config, peer);
-            return match php::fastcgi_request(addr, &params, &req.body) {
-                Ok(out) => php_response(&out),
-                Err(e) => {
-                    eprintln!("php-fpm error: {e}");
-                    status_only("502 Bad Gateway")
-                }
-            };
-        }
+    if is_php && let Some(addr) = php_addr {
+        let params = build_params(req, &file, docroot, config, peer);
+        return match php::fastcgi_request(addr, &params, &req.body) {
+            Ok(out) => php_response(&out),
+            Err(e) => {
+                eprintln!("php-fpm error: {e}");
+                status_only("502 Bad Gateway")
+            }
+        };
     }
 
     match fs::read(&file) {

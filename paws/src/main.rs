@@ -1,8 +1,8 @@
 use anyhow::Result;
-use std::io::BufRead;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 use paws::{Config, server};
+use std::io::BufRead;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 fn main() -> Result<()> {
     let config = Config::load()?;
