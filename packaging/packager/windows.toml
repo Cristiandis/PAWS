@@ -13,5 +13,5 @@ resources = [
 ]
 
 [nsis]
-install-mode = "perMachine"
+installer-mode = "perMachine"
 installer-icon = "packaging/icons/icon.ico"
