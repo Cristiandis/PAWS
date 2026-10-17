@@ -28,7 +28,7 @@ pub fn run(config: &Config, shutdown: &Arc<AtomicBool>) -> Result<()> {
                 config.interface, config.port
             )
         })?;
-    let pool = ThreadPool::new(NonZeroUsize::new(4).unwrap())?;
+    let pool = ThreadPool::new(NonZeroUsize::new(config.threads.max(1)).unwrap())?;
 
     let docroot_path = if Path::new(&config.document_root).is_absolute() {
         PathBuf::from(&config.document_root)

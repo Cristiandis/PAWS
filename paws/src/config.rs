@@ -13,6 +13,8 @@ pub struct Config {
     pub php: bool,
     #[serde(default = "default_root")]
     pub document_root: String,
+    #[serde(default = "default_threads")]
+    pub threads: usize,
 }
 
 fn default_interface() -> String {
@@ -25,6 +27,10 @@ fn default_port() -> String {
 
 fn default_php() -> bool {
     true
+}
+
+fn default_threads() -> usize {
+    4
 }
 
 fn default_root() -> String {
@@ -43,6 +49,7 @@ impl Default for Config {
             port: default_port(),
             php: default_php(),
             document_root: default_root(),
+            threads: default_threads(),
         }
     }
 }

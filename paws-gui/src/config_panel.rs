@@ -55,6 +55,9 @@ impl ConfigPanel {
         if self.config.document_root.trim().is_empty() {
             return Some("err-docroot-required");
         }
+        if self.config.threads < 1 {
+            return Some("err-threads");
+        }
         None
     }
 
@@ -107,6 +110,13 @@ impl ConfigPanel {
             ui.add_sized(
                 [ui.available_width(), 20.0],
                 egui::TextEdit::singleline(&mut self.config.port),
+            );
+        });
+
+        field(ui, &egui_i18n::tr!("cfg-threads"), |ui| {
+            ui.add_sized(
+                [ui.available_width(), 20.0],
+                egui::DragValue::new(&mut self.config.threads).range(1..=256),
             );
         });
 
