@@ -280,5 +280,5 @@ fn main() -> eframe::Result {
         ..Default::default()
     };
 
-    eframe::run_native("PAWS", native, Box::new(|cc| Ok(Box::new(App::new(cc)))))
+    eframe::run_native(&format!("PAWS {}", env!("CARGO_PKG_VERSION")), native, Box::new(|cc| Ok(Box::new(App::new(cc)))))
 }
