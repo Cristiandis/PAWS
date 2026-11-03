@@ -369,6 +369,7 @@ fn content_type(p: &Path) -> &'static str {
         Some("woff2") => "font/woff2",
         Some("mp4") => "video/mp4",
         Some("mp3") => "audio/mpeg",
+        Some("xml") => "application/xml",
         _ => "application/octet-stream",
     }
 }
